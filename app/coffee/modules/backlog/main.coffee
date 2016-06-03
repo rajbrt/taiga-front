@@ -39,7 +39,7 @@ module = angular.module("taigaBacklog")
 ## Backlog Controller
 #############################################################################
 
-class BacklogController extends mixOf(taiga.Controller, taiga.PageMixin, taiga.FiltersMixin)
+class BacklogController extends mixOf(taiga.Controller, taiga.PageMixin, taiga.FiltersMixin, taiga.UsFiltersMixin)
     @.$inject = [
         "$scope",
         "$rootScope",
@@ -57,17 +57,25 @@ class BacklogController extends mixOf(taiga.Controller, taiga.PageMixin, taiga.F
         "$tgLoading",
         "tgResources",
         "$tgQueueModelTransformation",
-        "tgErrorHandlingService"
+        "tgErrorHandlingService",
+        "$tgStorage",
+        "tgFilterRemoteStorageService"
     ]
 
+    storeCustomFiltersName: 'backlog-custom-filters'
+    storeFiltersName: 'backlog-filters'
+    backlogOrder: {}
+
     constructor: (@scope, @rootscope, @repo, @confirm, @rs, @params, @q, @location, @appMetaService, @navUrls,
-                  @events, @analytics, @translate, @loading, @rs2, @modelTransform, @errorHandlingService) ->
+                  @events, @analytics, @translate, @loading, @rs2, @modelTransform, @errorHandlingService, @storage, @filterRemoteStorageService) ->
         bindMethods(@)
 
         @.page = 1
         @.disablePagination = false
         @.firstLoadComplete = false
         @scope.userstories = []
+
+        return if @.applyStoredFilters(@params.pslug, "backlog-filters")
 
         @scope.sectionName = @translate.instant("BACKLOG.SECTION_NAME")
         @showTags = false
@@ -96,6 +104,9 @@ class BacklogController extends mixOf(taiga.Controller, taiga.PageMixin, taiga.F
 
         # On Error
         promise.then null, @.onInitialDataError.bind(@)
+
+    filtersReloadContent: () ->
+        @.loadUserstories(true)
 
     initializeEventHandlers: ->
         @scope.$on "usform:bulk:success", =>
@@ -221,47 +232,6 @@ class BacklogController extends mixOf(taiga.Controller, taiga.PageMixin, taiga.F
 
             return sprints
 
-    restoreFilters: ->
-        selectedTags = @scope.oldSelectedTags
-        selectedStatuses = @scope.oldSelectedStatuses
-
-        return if !selectedStatuses and !selectedStatuses
-
-        @scope.filtersQ = @scope.filtersQOld
-
-        @.replaceFilter("q", @scope.filtersQ)
-
-        _.each [selectedTags, selectedStatuses], (filterGrp) =>
-            _.each filterGrp, (item) =>
-                filters = @scope.filters[item.type]
-                filter = _.find(filters, {id: item.id})
-                filter.selected = true
-
-                @.selectFilter(item.type, item.id)
-
-        @.loadUserstories()
-
-    resetFilters: ->
-        selectedTags = _.filter(@scope.filters.tags, "selected")
-        selectedStatuses = _.filter(@scope.filters.status, "selected")
-
-        @scope.oldSelectedTags = selectedTags
-        @scope.oldSelectedStatuses = selectedStatuses
-
-        @scope.filtersQOld = @scope.filtersQ
-        @scope.filtersQ = undefined
-        @.replaceFilter("q", @scope.filtersQ)
-
-        _.each [selectedTags, selectedStatuses], (filterGrp) =>
-            _.each filterGrp, (item) =>
-                filters = @scope.filters[item.type]
-                filter = _.find(filters, {id: item.id})
-                filter.selected = false
-
-                @.unselectFilter(item.type, item.id)
-
-        @.loadUserstories()
-
     loadAllPaginatedUserstories: () ->
         page = @.page
 
@@ -273,15 +243,15 @@ class BacklogController extends mixOf(taiga.Controller, taiga.PageMixin, taiga.F
 
         @.loadingUserstories = true
         @.disablePagination = true
-        @scope.httpParams = @.getUrlFilters()
-        @rs.userstories.storeQueryParams(@scope.projectId, @scope.httpParams)
+        params = _.clone(@location.search())
+        @rs.userstories.storeQueryParams(@scope.projectId, params)
 
         if resetPagination
             @.page = 1
 
-        @scope.httpParams.page = @.page
+        params.page = @.page
 
-        promise = @rs.userstories.listUnassigned(@scope.projectId, @scope.httpParams, pageSize)
+        promise = @rs.userstories.listUnassigned(@scope.projectId, params, pageSize)
 
         return promise.then (result) =>
             userstories = result[0]
@@ -293,7 +263,8 @@ class BacklogController extends mixOf(taiga.Controller, taiga.PageMixin, taiga.F
             # NOTE: Fix order of USs because the filter orderBy does not work propertly in the partials files
             @scope.userstories = @scope.userstories.concat(_.sortBy(userstories, "backlog_order"))
 
-            @.setSearchDataFilters()
+            for it in @scope.userstories
+                @.backlogOrder[it.id] = it.backlog_order
 
             @.loadingUserstories = false
 
@@ -397,12 +368,41 @@ class BacklogController extends mixOf(taiga.Controller, taiga.PageMixin, taiga.F
             if newSprintId == null
                 # Rehash userstories order field
 
-                items = @.resortUserStories(userstories, "backlog_order")
-                data = @.prepareBulkUpdateData(items, "backlog_order")
+                beforeDestination = _.slice(@scope.userstories, 0, newUsIndex)
+                afterDestination = _.slice(@scope.userstories, newUsIndex)
+
+                previous = beforeDestination[beforeDestination.length - 1]
+
+                if previous
+                    startIndex = @.backlogOrder[previous.id] + 1
+                else
+                    startIndex = 0
+
+                setOrders = []
+
+                for it, key in usList
+                    @.backlogOrder[it.id] = startIndex + key
+
+                    setOrders.push({
+                        order: @.backlogOrder[it.id],
+                        us_id: it.id
+                    })
+
+                lastUs = usList[usList.length - 1]
+                startIndex =  @.backlogOrder[lastUs.id] + 1
+
+                for it, key in afterDestination
+                    @.backlogOrder[it.id] = startIndex + key
+
+                for it in beforeDestination
+                    setOrders.push({
+                        order: @.backlogOrder[it.id],
+                        us_id: it.id
+                    })
 
                 # Persist in bulk all affected
                 # userstories with order change
-                @rs.userstories.bulkUpdateBacklogOrder(project, data).then =>
+                @rs.userstories.bulkUpdateBacklogOrder(project, setOrders).then =>
                     @rootscope.$broadcast("sprint:us:moved")
 
             # For sprint
@@ -432,19 +432,36 @@ class BacklogController extends mixOf(taiga.Controller, taiga.PageMixin, taiga.F
                     r = sprint.user_stories.indexOf(us)
                     sprint.user_stories.splice(r, 1)
 
+            setOrders = {}
+            beforeDestination = _.slice(@scope.userstories, 0, newUsIndex)
+            for it in beforeDestination
+                setOrders[it.id] = @.backlogOrder[it.id]
+
+            options = {
+                headers: {
+                    "set-orders": JSON.stringify(setOrders)
+                }
+            }
+
+            previous = beforeDestination[beforeDestination.length - 1]
+
+            if previous
+                order = @.backlogOrder[previous.id] + 1
+            else
+                order = 0
+
+            @.backlogOrder[us.id] = order
+            us.backlog_order = order
+
             # Persist the milestone change of userstory
-            promise = @repo.save(us)
+            promise = @repo.save(us, true, {}, options, true)
 
             # Rehash userstories order field
             # and persist in bulk all changes.
             promise = promise.then =>
-                items = @.resortUserStories(@scope.userstories, "backlog_order")
-                data = @.prepareBulkUpdateData(items, "backlog_order")
-                return @rs.userstories.bulkUpdateBacklogOrder(us.project, data).then =>
-                    @rootscope.$broadcast("sprint:us:moved")
-
-                    if movedFromClosedSprint
-                        @rootscope.$broadcast("backlog:load-closed-sprints")
+                @rootscope.$broadcast("sprint:us:moved")
+                if movedFromClosedSprint
+                    @rootscope.$broadcast("backlog:load-closed-sprints")
 
             promise.then null, ->
                 console.log "FAIL" # TODO
@@ -488,11 +505,7 @@ class BacklogController extends mixOf(taiga.Controller, taiga.PageMixin, taiga.F
             items = @.resortUserStories(newSprint.user_stories, "sprint_order")
             data = @.prepareBulkUpdateData(items, "sprint_order")
 
-            @rs.userstories.bulkUpdateSprintOrder(project, data).then (result) =>
-                @rootscope.$broadcast("sprint:us:moved")
-
-            @rs.userstories.bulkUpdateBacklogOrder(project, data).then =>
-                @rootscope.$broadcast("sprint:us:moved")
+            @rootscope.$broadcast("sprint:us:moved")
 
             if movedToClosedSprint || movedFromClosedSprint
                 @scope.$broadcast("backlog:load-closed-sprints")
@@ -502,94 +515,9 @@ class BacklogController extends mixOf(taiga.Controller, taiga.PageMixin, taiga.F
 
         return promise
 
-    isFilterSelected: (type, id) ->
-        if @searchdata[type]? and @searchdata[type][id]
-            return true
-        return false
-
-    setSearchDataFilters: () ->
-        urlfilters = @.getUrlFilters()
-
-        if urlfilters.q
-            @scope.filtersQ = @scope.filtersQ or urlfilters.q
-
-        @searchdata = {}
-        for name, value of urlfilters
-            if not @searchdata[name]?
-                @searchdata[name] = {}
-
-            for val in taiga.toString(value).split(",")
-                @searchdata[name][val] = true
-
-    getUrlFilters: ->
-        return _.pick(@location.search(), "status", "tags", "q")
-
-    generateFilters: ->
-        urlfilters = @.getUrlFilters()
-        @scope.filters =  {}
-
-        loadFilters = {}
-        loadFilters.project = @scope.projectId
-        loadFilters.tags = urlfilters.tags
-        loadFilters.status = urlfilters.status
-        loadFilters.q = urlfilters.q
-        loadFilters.milestone = 'null'
-
-        return @rs.userstories.filtersData(loadFilters).then (data) =>
-            choicesFiltersFormat = (choices, type, byIdObject) =>
-                _.map choices, (t) ->
-                    t.type = type
-                    return t
-
-            tagsFilterFormat = (tags) =>
-                return _.map tags, (t) ->
-                    t.id = t.name
-                    t.type = 'tags'
-                    return t
-
-            # Build filters data structure
-            @scope.filters.status = choicesFiltersFormat(data.statuses, "status", @scope.usStatusById)
-            @scope.filters.tags = tagsFilterFormat(data.tags)
-
-            selectedTags = _.filter(@scope.filters.tags, "selected")
-            selectedTags = _.map(selectedTags, "id")
-
-            selectedStatuses = _.filter(@scope.filters.status, "selected")
-            selectedStatuses = _.map(selectedStatuses, "id")
-
-            @.markSelectedFilters(@scope.filters, urlfilters)
-
-            #store query params
-            @rs.userstories.storeQueryParams(@scope.projectId, {
-                "status": selectedStatuses,
-                "tags": selectedTags,
-                "project": @scope.projectId
-                "milestone": null
-            })
-
-    markSelectedFilters: (filters, urlfilters) ->
-        # Build selected filters (from url) fast lookup data structure
-        searchdata = {}
-        for name, value of _.omit(urlfilters, "page", "orderBy")
-            if not searchdata[name]?
-                searchdata[name] = {}
-
-            for val in "#{value}".split(",")
-                searchdata[name][val] = true
-
-        isSelected = (type, id) ->
-            if searchdata[type]? and searchdata[type][id]
-                return true
-            return false
-
-        for key, value of filters
-            for obj in value
-                obj.selected = if isSelected(obj.type, obj.id) then true else undefined
-
     ## Template actions
 
     updateUserStoryStatus: () ->
-        @.setSearchDataFilters()
         @.generateFilters().then () =>
             @rootscope.$broadcast("filters:update")
             @.loadProjectStats()
@@ -807,8 +735,15 @@ BacklogDirective = ($repo, $rootscope, $translate) ->
             text = $translate.instant("BACKLOG.TAGS.SHOW")
             elm.text(text)
 
+    openFilterInit = ($scope, $el, $ctrl) ->
+        sidebar = $el.find("sidebar.backlog-filter")
+
+        sidebar.addClass("active")
+
+        $ctrl.activeFilters = true
+
     showHideFilter = ($scope, $el, $ctrl) ->
-        sidebar = $el.find("sidebar.filters-bar")
+        sidebar = $el.find("sidebar.backlog-filter")
         sidebar.one "transitionend", () ->
             timeout 150, ->
                 $rootscope.$broadcast("resize")
@@ -823,11 +758,6 @@ BacklogDirective = ($repo, $rootscope, $translate) ->
         showText = $translate.instant("BACKLOG.FILTERS.SHOW")
 
         toggleText(target, [hideText, showText])
-
-        if !sidebar.hasClass("active")
-            $ctrl.resetFilters()
-        else
-            $ctrl.restoreFilters()
 
         $ctrl.toggleActiveFilters()
 
@@ -847,11 +777,13 @@ BacklogDirective = ($repo, $rootscope, $translate) ->
         linkFilters($scope, $el, $attrs, $ctrl)
         linkDoomLine($scope, $el, $attrs, $ctrl)
 
-        filters = $ctrl.getUrlFilters()
+        filters = $ctrl.location.search()
         if filters.status ||
            filters.tags ||
-           filters.q
-            showHideFilter($scope, $el, $ctrl)
+           filters.q ||
+           filters.assigned_to ||
+           filters.owner
+            openFilterInit($scope, $el, $ctrl)
 
         $scope.$on "showTags", () ->
             showHideTags($ctrl)

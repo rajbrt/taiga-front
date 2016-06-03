@@ -7,8 +7,8 @@ $summary-background: $grayer;
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-start;
-    margin-bottom: 2rem;
-    padding: 1em;
+    margin-bottom: 1rem;
+    padding: 1rem;
     .summary-stats {
         display: flex;
         margin: 0 .5rem;
@@ -103,6 +103,7 @@ $summary-background: $grayer;
 
 .large-summary {
     justify-content: space-between;
+    margin-bottom: 1rem;
     .large-summary-wrapper {
         align-content: center;
         display: flex;

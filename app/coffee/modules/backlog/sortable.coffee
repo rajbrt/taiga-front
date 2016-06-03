@@ -42,7 +42,7 @@ deleteElement = (el) ->
     $(el).off()
     $(el).remove()
 
-BacklogSortableDirective = ($repo, $rs, $rootscope, $tgConfirm, $translate) ->
+BacklogSortableDirective = ($repo, $rs, $rootscope, $tgConfirm) ->
     link = ($scope, $el, $attrs) ->
         bindOnce $scope, "project", (project) ->
             # If the user has not enough permissions we don't enable the sortable
@@ -50,10 +50,6 @@ BacklogSortableDirective = ($repo, $rs, $rootscope, $tgConfirm, $translate) ->
                 return
 
             initIsBacklog = false
-
-            filterError = ->
-                text = $translate.instant("BACKLOG.SORTABLE_FILTER_ERROR")
-                $tgConfirm.notify("error", text)
 
             drake = dragula([$el[0], $('.empty-backlog')[0]], {
                 copySortSource: false,
@@ -63,18 +59,11 @@ BacklogSortableDirective = ($repo, $rs, $rootscope, $tgConfirm, $translate) ->
                     if !$(item).hasClass('row')
                         return false
 
-                    # it doesn't move is the filter is open
-                    parent = $(item).parent()
-                    initIsBacklog = parent.hasClass('backlog-table-body')
-
-                    if initIsBacklog && $el.hasClass("active-filters")
-                        filterError()
-                        return false
-
                     return true
             })
 
             drake.on 'drag', (item, container) ->
+                # it doesn't move is the filter is open
                 parent = $(item).parent()
                 initIsBacklog = parent.hasClass('backlog-table-body')
 
@@ -88,6 +77,8 @@ BacklogSortableDirective = ($repo, $rs, $rootscope, $tgConfirm, $translate) ->
                 $(item).addClass('backlog-us-mirror')
 
             drake.on 'dragend', (item) ->
+                parent = $(item).parent()
+
                 $('.doom-line').remove()
 
                 parent = $(item).parent()
@@ -158,6 +149,5 @@ module.directive("tgBacklogSortable", [
     "$tgResources",
     "$rootScope",
     "$tgConfirm",
-    "$translate",
     BacklogSortableDirective
 ])

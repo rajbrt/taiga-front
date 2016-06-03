@@ -112,6 +112,7 @@ urls = {
     "task-downvote": "/tasks/%s/downvote"
     "task-watch": "/tasks/%s/watch"
     "task-unwatch": "/tasks/%s/unwatch"
+    "task-filters": "/tasks/filters_data"
 
     # Issues
     "issues": "/issues"

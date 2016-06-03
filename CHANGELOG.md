@@ -19,6 +19,10 @@
     - Drag & Drop ordering for wiki links.
     - Add a list of all wiki pages
     - Add Wiki history
+- Filters refactor
+- Cards ui refactor with zoom
+- Kanban filters
+- Taskboard filters
 
 ### Misc
 - Lots of small and not so small bugfixes.
