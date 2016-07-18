@@ -47,9 +47,6 @@ class TagLineController
     displayTagInput: () ->
         @.addTag = true
 
-    onSelectDropdownTag: (tag, color) ->
-        @.onAddTag(tag, color)
-
     closeTagInput: (event) ->
         if event.keyCode == 27
             @.addTag = false

@@ -28,8 +28,7 @@ TagLineDirective = () ->
                 ctrl.tags = ctrl._renderTags(tags, ctrl.project)
 
         unwatch = scope.$watch "vm.project", (project) ->
-            return if not project
-
+            return if not Object.keys(project).length
             unwatch()
             ctrl.colorArray = ctrl._createColorsArray(ctrl.project.tags_colors)
 

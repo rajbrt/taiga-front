@@ -104,15 +104,16 @@ describe "TagLineCommon", ->
         color = "CC0000"
 
         TagLineCommonCtrl.project = {
-            tags: ['tag1', 'tag2']
+            tags: ['tag1', 'tag2'],
+            tags_colors: ["#CC0000", "CCBB00"]
         }
 
-        TagLineCommonCtrl.onAddTag(tag, color)
+        TagLineCommonCtrl.onAddTag(tag, color, TagLineCommonCtrl.project )
         expect(TagLineCommonCtrl.project.tags).to.be.eql(tags)
         expect(TagLineCommonCtrl.addTag).to.be.false
         expect(TagLineCommonCtrl.loadingAddTag).to.be.false
 
-    it.only "on remove tag", () ->
+    it "on remove tag", () ->
         tag = 'tag1'
         TagLineCommonCtrl.project = {
             tags: ['tag1', 'tag2']
