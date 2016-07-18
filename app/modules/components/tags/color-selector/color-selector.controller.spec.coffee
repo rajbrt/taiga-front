@@ -17,7 +17,7 @@
 # File: color-selector.controller.spec.coffee
 ###
 
-describe "HistorySection", ->
+describe "ColorSelector", ->
     provide = null
     controller = null
     colorSelectorCtrl = null

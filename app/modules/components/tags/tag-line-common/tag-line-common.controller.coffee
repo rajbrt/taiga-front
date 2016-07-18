@@ -44,21 +44,19 @@ class TagLineCommonController
     displayTagInput: () ->
         @.addTag = true
 
-    onSelectDropdownTag: (tag, color) ->
-        @.onAddTag(tag, color)
-
     closeTagInput: (event) ->
         if event.keyCode == 27
             @.addTag = false
 
     ## UNCOMMON UTILITIES
 
-    onAddTag: (tag, color) ->
+    onAddTag: (tag, color, project) ->
+        console.log tag, color, project
         @.loadingAddTag = true
         value = trim(tag.toLowerCase())
 
         tags = @.project.tags
-        projectTags = @.project.tags_colors
+        projectTags = project.tags_colors
 
         tags = [] if not tags?
         projectTags = {} if not projectTags?
@@ -68,7 +66,7 @@ class TagLineCommonController
 
         projectTags[tag] = color || null
 
-        @.project.tags = tags
+        project.tags = tags
         @.addTag = false
         @.loadingAddTag = false
         #Update Model
@@ -79,7 +77,7 @@ class TagLineCommonController
 
         tags = @.project.tags
 
-        tags.pull(value)
+        _.pull(tags, value)
 
         @.loadingRemoveTag = false
         #Update Model

@@ -18,7 +18,7 @@
             tg-tag-option.tags-dropdown-option(
                 name="{{tag[0]}}"
                 color="{{tag[1]}}"
-                ng-click="vm.onSelectDropdownTag(tag[0], tag[1])"
+                ng-click="vm.onAddTag(tag[0], tag[1], vm.project)"
             )
     tg-color-selector(
         selected-color="vm.selectedColor"
