@@ -114,30 +114,29 @@ describe "TagLineDetail", ->
         TagLineController.closeTagInput(event)
         expect(TagLineController.addTag).to.be.false
 
-    # it "on delete tag success", () ->
-    #     tag = {
-    #         name: "tag"
-    #     }
-    #     TagLineController.loadingRemoveTag = tag.name
-    #     TagLineController.onDeleteTag(tag)
-    #
 
+    # TODO: To be reviewed
+    # Also missing:
+    #   Delete tag error
+    #   Add tag success
+    #   Add tag error
 
+    it "on delete tag success", (done) ->
+        tag = {
+            name: 'tag1'
+        }
+        tagName = tag.name
+        tags = ['tag1', 'tag2', 'tag3']
 
-    # onDeleteTag: (tag) ->
-    #     @.loadingRemoveTag = tag.name
-    #     onDeleteTagSuccess = () =>
-    #         @rootScope.$broadcast("object:updated")
-    #         @.loadingRemoveTag = false
-    #
-    #     onDeleteTagError = () =>
-    #         @confirm.notify("error")
-    #         @.loadingRemoveTag = false
-    #
-    #     tagName = trim(tag.name.toLowerCase())
-    #     transform = @modelTransform.save (item) ->
-    #         tags = _.clone(item.tags, false)
-    #         item.tags = _.pull(tags, tagName)
-    #         return item
-    #
-    #     return transform.then(onDeleteTagSuccess, onDeleteTagError)
+        item = {
+            tags: ['tag1', 'tag2', 'tag3']
+        }
+
+        promise = mocks.tgQueueModelTransformation.save.promise().resolve(item)
+        TagLineController.onDeleteTag(tag).then (item) ->
+            expect(tagName).to.be.equal(tag.name)
+            expect(tags).to.be.equal(item.tags)
+            expect(item.tags).to.be.equal(['tag2', 'tag3'])
+            expect(TagLineController.loadingRemoveTag).to.be.false
+            # expect(mocks.rootScope.$broadcast).to.be.calledWith("object:updated")
+            done()
