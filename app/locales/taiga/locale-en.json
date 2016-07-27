@@ -112,7 +112,6 @@
             }
         },
         "SEE_USER_PROFILE": "See {{username }} profile",
-        "EPIC_PILL": "EPICS",
         "USER_STORY": "User story",
         "TASK": "Task",
         "ISSUE": "Issue",
@@ -373,6 +372,7 @@
     },
     "EPICS": {
         "TITLE": "EPICS",
+        "EPIC": "EPIC",
         "DASHBOARD": {
             "ADD": "+ ADD EPIC",
             "UNASSIGNED": "Unassigned"
