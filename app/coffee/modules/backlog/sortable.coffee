@@ -93,8 +93,6 @@ BacklogSortableDirective = ($repo, $rs, $rootscope, $tgConfirm) ->
 
                 $(document.body).removeClass("drag-active")
 
-                items = $(item).parent().find('.row')
-
                 sprint = null
 
                 firstElement = if dragMultipleItems.length then dragMultipleItems[0] else item
@@ -122,11 +120,7 @@ BacklogSortableDirective = ($repo, $rs, $rootscope, $tgConfirm) ->
                         usList = _.map dragMultipleItems, (item) ->
                             return item = $(item).scope().us
                     else
-                        usList = _.map items, (item) ->
-                            item = $(item)
-                            itemUs = item.scope().us
-
-                            return itemUs
+                        usList = [$(item).scope().us]
 
                 $scope.$emit("sprint:us:move", usList, index, sprint)
 

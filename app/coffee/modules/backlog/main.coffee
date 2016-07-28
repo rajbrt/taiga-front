@@ -65,6 +65,7 @@ class BacklogController extends mixOf(taiga.Controller, taiga.PageMixin, taiga.F
     storeCustomFiltersName: 'backlog-custom-filters'
     storeFiltersName: 'backlog-filters'
     backlogOrder: {}
+    milestonesOrder: {}
 
     constructor: (@scope, @rootscope, @repo, @confirm, @rs, @params, @q, @location, @appMetaService, @navUrls,
                   @events, @analytics, @translate, @loading, @rs2, @modelTransform, @errorHandlingService, @storage, @filterRemoteStorageService) ->
@@ -186,6 +187,12 @@ class BacklogController extends mixOf(taiga.Controller, taiga.PageMixin, taiga.F
             @scope.showGraphPlaceholder = !(stats.total_points? && stats.total_milestones?)
             return stats
 
+    setMilestonesOrder: (sprints) ->
+        for sprint in sprints
+            @.milestonesOrder[sprint.id] = {}
+            for it in sprint.user_stories
+                @.milestonesOrder[sprint.id][it.id] = it.sprint_order
+
     unloadClosedSprints: ->
         @scope.$apply =>
             @scope.closedSprints =  []
@@ -195,6 +202,8 @@ class BacklogController extends mixOf(taiga.Controller, taiga.PageMixin, taiga.F
         params = {closed: true}
         return @rs.sprints.list(@scope.projectId, params).then (result) =>
             sprints = result.milestones
+
+            @.setMilestonesOrder(sprints)
 
             @scope.totalClosedMilestones = result.closed
 
@@ -210,6 +219,8 @@ class BacklogController extends mixOf(taiga.Controller, taiga.PageMixin, taiga.F
         params = {closed: false}
         return @rs.sprints.list(@scope.projectId, params).then (result) =>
             sprints = result.milestones
+
+            @.setMilestonesOrder(sprints)
 
             @scope.totalMilestones = sprints
             @scope.totalClosedMilestones = result.closed
@@ -326,6 +337,120 @@ class BacklogController extends mixOf(taiga.Controller, taiga.PageMixin, taiga.F
         return items
 
     moveUs: (ctx, usList, newUsIndex, newSprintId) ->
+        oldSprintId = usList[0].milestone
+        project = usList[0].project
+
+        if oldSprintId
+            sprint = @scope.sprintsById[oldSprintId] || @scope.closedSprintsById[oldSprintId]
+
+        if newSprintId
+            newSprint = @scope.sprintsById[newSprintId] || @scope.closedSprintsById[newSprintId]
+
+        currentSprintId = if newSprintId != oldSprintId then newSprintId else oldSprintId
+
+        destinationUsList = null
+        orderList = null
+        orderField = ""
+
+        if newSprintId != oldSprintId
+            if newSprintId == null # From sprint to backlog
+                @scope.userstories.concat(usList)
+
+                for us, key in usList
+                    sprint.user_stories = _.remove sprint.user_stories, (it) -> it.id == us.id
+
+                destinationUsList = @scope.userstories
+                orderField = "backlog_order"
+                orderList = @.backlogOrder
+            else # From backlog to sprint
+                newSprint.user_stories.concat(usList)
+
+                for us in usList
+                    @scope.userstories = _.remove @scope.userstories, (it) -> it.id == us.id
+
+                destinationUsList = newSprint.user_stories
+                orderField = "sprint_order"
+                orderList = @.milestonesOrder[newSprint.id]
+        else
+            if oldSprintId == null # backlog
+                destinationUsList = @scope.userstories
+                orderField = "backlog_order"
+                orderList = @.backlogOrder
+            else # sprint
+                destinationUsList = sprint.user_stories
+                orderField = "sprint_order"
+                orderList = @.milestonesOrder[sprint.id]
+
+        beforeDestination = _.slice(destinationUsList, 0, newUsIndex)
+        afterDestination = _.slice(destinationUsList, newUsIndex)
+
+        previous = beforeDestination[beforeDestination.length - 1]
+        setPreviousOrders = []
+
+        if !previous
+            startIndex = 0
+        else if previous
+            startIndex = orderList[previous.id] + 1
+
+            previousWithTheSameOrder = _.filter beforeDestination, (it) -> it[orderField] == orderList[previous.id]
+
+            if previousWithTheSameOrder.length > 1
+                setPreviousOrders = _.map previousWithTheSameOrder, (it) ->
+                    return {us_id: it.id, order: orderList[it.id]}
+
+        modifiedUs = []
+        for us, key in usList
+            us.milestone = currentSprintId
+            us[orderField] = startIndex + key
+
+            modifiedUs.push({us_id: us.id, order: us[orderField]})
+
+        lastUs = usList[usList.length - 1]
+
+        for it, key in afterDestination
+            orderList[it.id] = orderList[lastUs.id] + key + 1
+
+        # refresh order
+        @scope.userstories = _.sortBy @scope.userstories, (it) => @.backlogOrder[it.id]
+
+        for sprint in @scope.sprints
+            sprint.userstories = _.sortBy sprint.userstories, (it) => @.milestonesOrder[sprint.id][it.id]
+
+        for sprint in @scope.closedSprints
+            sprint.userstories = _.sortBy sprint.userstories, (it) => @.milestonesOrder[sprint.id][it.id]
+
+        #saving
+        if usList.length > 1 && (newSprintId != oldSprintId) # drag multiple to sprint
+            data = modifiedUs.concat(setPreviousOrders)
+            promise = @rs.userstories.bulkUpdateMilestone(project, newSprintId, data)
+        else if usList.length > 1 # drag multiple in backlog
+            data = modifiedUs.concat(setPreviousOrders)
+            promise = @rs.userstories.bulkUpdateBacklogOrder(project, data)
+        else  # drag single
+            setOrders = {}
+            for it in setPreviousOrders
+                setOrders[it.us_id] = it.order
+
+            options = {
+                headers: {
+                    "set-orders": JSON.stringify(setOrders)
+                }
+            }
+
+            promise = @repo.save(usList[0], true, {}, options, true)
+
+        promise.then () =>
+            @rootscope.$broadcast("sprint:us:moved")
+
+        # @rs.userstories.bulkUpdateBacklogOrder(project, setOrders).then () =>
+        #     @rootscope.$broadcast("sprint:us:moved")
+
+        # @rootscope.$broadcast("sprint:us:moved")
+        # if movedFromClosedSprint
+        #     @rootscope.$broadcast("backlog:load-closed-sprints")
+
+        return
+
         oldSprintId = usList[0].milestone
         project = usList[0].project
 

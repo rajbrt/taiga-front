@@ -205,7 +205,6 @@ class UsFiltersMixin
         loadFilters.assigned_to = urlfilters.assigned_to
         loadFilters.owner = urlfilters.owner
         loadFilters.q = urlfilters.q
-        loadFilters.milestone = "null"
 
         return @q.all([
             @rs.userstories.filtersData(loadFilters),
